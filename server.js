@@ -2,13 +2,14 @@ var express    = require('express');        // call express
 var app        = express();                 // define our app using express
 var bodyParser = require('body-parser');
 var mongoose   = require('mongoose');
-var Product     = require('./app/models/product');
-var Account = require('./app/models/account');
+var Product    = require('./app/models/product');
+var Account    = require('./app/models/account');
+var Order      = require('./app/models/order');
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-var port = process.env.PORT || 8000;
+var port = process.env.PORT || 8800;
 
 //Mongo Connection
 mongoose.connect('mongodb://admin:admin@ds059694.mongolab.com:59694/roxapi');
@@ -70,7 +71,7 @@ router.route('/inventory/:product_id')
         product.name = req.body.name || product.name;
         product.description = req.body.description || product.description;
         product.unitPrice = req.body.unitPrice || product.unitPrice;
-        product.unitCost =  req.body.productCost || product.productCost;
+        product.unitCost =  req.body.unitCost || product.unitCost;
         product.quantity =  req.body.quantity || product.quantity;
         product.category =  req.body.category || product.category;
         product.save(function(err){
@@ -162,6 +163,169 @@ router.route('/accounts/:account_id')
             res.json({message: 'Account deleted.'});
         });
     });
+
+router.route('/orders')
+    .post(function(req, res){
+    var order = new Order();
+    order.totalPrice = req.body.totalPrice;
+    order.totalCost = req.body.totalCost;
+    order.date = req.body.date;
+    order.save(function(err) {
+        if(err){
+            res.send(err);
+        }
+        res.json({message:'Order created.'});
+        });
+    })
+    .get(function(req, res) {
+        Order.find(function(err, orders){
+            if(err){
+                res.send(err);
+            }
+            res.json(orders);
+        });
+    });
+
+router.route('/orders/:account_id')
+    .post(function(req, res){
+        Account.findById(req.params.account_id, function(err, account){
+            if(err||!account)
+                res.send(err);
+            else if(account.shoppingcart.length)
+            {
+              var result = loadProducts(0, account.shoppingcart);
+              console.log(result);
+              account.shoppingcart = [];
+              var order = new Order();
+              order.totalPrice = result.totalPrice;
+              order.totalCost = result.totalCost;
+              order.buyerId = account._id;
+              order.save(function(err) {
+                  if(err){
+                      res.send(err);
+                  }
+                  account.save(function(err) {
+                      if(err){
+                          res.send(err);
+                      }
+                      res.json({message:'Order created.'});
+                  });
+                });                
+            }
+            res.json({message:'Shopping cart is empty.'});
+        });
+});
+    
+function loadProducts(i, cart)
+{
+    console.log(cart);
+    if(i < cart.length)
+    {
+        Product.findById(cart[i].productId,
+                         function(err, product){
+            console.log(i);console.log(product);
+            if(!err && product)
+            {
+                var totalCost = 0;var totalPrice = 0;
+                var result = loadProducts(i++, cart);
+                totalPrice += result.totalPrice;
+                totalCost += result.totalCost;
+                return {"totalCost" : totalCost, "totalPrice" : totalPrice};
+            }
+        });
+    }
+    return {"totalCost" : 0, "totalPrice" : 0};
+}
+
+router.route('/shoppingcart')
+    .post(function(req, res){
+    Product.findById(req.body.productId, function(err, product){
+        if(err || !product)
+            res.send(err);
+        else if(product.quantity > 0){//only if in inventory
+            product.quantity--;//take out of inventory
+            Account.findById(req.body.accountId, function(err, account){
+                if(err || !account)
+                    res.send(err);
+                var exists = false;
+                for(var i = 0; i < account.shoppingcart.length; i++)
+                {
+                    if(account.shoppingcart[i].productId == req.body.productId)
+                    {
+                        exists = true;
+                        account.shoppingcart[i].quantity++;
+                    }
+                }
+                if(!exists)
+                {
+                    account.shoppingcart.push({"productId" : req.body.productId,
+                                               "quantity"  : 1});
+                } 
+                product.save(function(err){
+                    if(err)
+                        res.send(err);
+                    var tempCart = account.shoppingcart;
+                    account.shoppingcart = [];
+                    account.save(function(err){
+                        if(err)
+                            res.send(err);
+                        account.shoppingcart = tempCart;
+                        account.save(function(err){
+                            if(err)
+                                res.send(err);
+                        res.json(account.shoppingcart);
+                        });
+                    });
+                });
+            });
+        }
+        else
+        {
+            res.json({message :  "Product not in inventory."});
+        }
+    });
+})
+    .delete(function(req, res){
+    Product.findById(req.body.productId, function(err, product){
+        if(err||!product)
+            res.send(err);
+        else
+        {           
+            Account.findById(req.body.accountId, function(err, account){
+                if(err||!account)
+                    res.send(err);
+                var index = 0;
+                for(var i = 0; i < account.shoppingcart.length; i++)
+                {
+                    if(account.shoppingcart[i].productId == req.body.productId)          
+                    {
+                        index = i;
+                        account.shoppingcart[i].quantity--;//take out of shoppingcart
+                        product.quantity++;//add back to inventory
+                    }
+                }
+                if(!account.shoppingcart[index].quantity)
+                    account.shoppingcart.splice(index, 1);
+                product.save(function(err){
+                    if(err)
+                        res.send(err);
+                    var tempCart = account.shoppingcart;
+                    account.shoppingcart = [];
+                    account.save(function(err){
+                        if(err)
+                            res.send(err);
+                        account.shoppingcart = tempCart;
+                        account.save(function(err){
+                            if(err)
+                                res.send(err);
+                        res.json(account.shoppingcart);
+                        });
+                    });
+                });
+            });
+        }
+    });
+});
 // =============================================================================
 
 app.use('/api', router);
