@@ -8,7 +8,6 @@ var accountSchema    = new Schema({
                     message: "Name required."}
            },
     username : {    type: String,
-                    unique : true,
                     validate: { validator: function(v){
                         return Boolean(v);},   
                     message: "Username required."}
@@ -23,6 +22,11 @@ var accountSchema    = new Schema({
                         return Boolean(v);},   
                     message: "Email required."}
             },
+    password: {    type: String,
+                    validate: { validator: function(v){
+                        return Boolean(v);},   
+                    message: "Username required."}
+               },
    shoppingcart : { type: Array,
                     default : []
                   },
