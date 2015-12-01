@@ -121,7 +121,7 @@ router.route('/accounts/:username/:password')
     .get(function(req, res){
         Account.findOne({'username' : { $regex : new RegExp(req.params.username, "i") }, 
                           'password' : req.params.password},
-                         'name admin email shoppingcart',
+                         '_id username password name admin email shoppingcart',
                          function(err, account){
                             if(err)
                                 res.send(err);
@@ -185,57 +185,6 @@ router.route('/orders')
             res.json(orders);
         });
     });
-
-router.route('/orders/:account_id')
-    .post(function(req, res){
-        Account.findById(req.params.account_id, function(err, account){
-            if(err||!account)
-                res.send(err);
-            else if(account.shoppingcart.length)
-            {
-              var result = loadProducts(0, account.shoppingcart);
-              console.log(result);
-              account.shoppingcart = [];
-              var order = new Order();
-              order.totalPrice = result.totalPrice;
-              order.totalCost = result.totalCost;
-              order.buyerId = account._id;
-              order.save(function(err) {
-                  if(err){
-                      res.send(err);
-                  }
-                  account.save(function(err) {
-                      if(err){
-                          res.send(err);
-                      }
-                      res.json({message:'Order created.'});
-                  });
-                });                
-            }
-            res.json({message:'Shopping cart is empty.'});
-        });
-});
-    
-function loadProducts(i, cart)
-{
-    console.log(cart);
-    if(i < cart.length)
-    {
-        Product.findById(cart[i].productId,
-                         function(err, product){
-            console.log(i);console.log(product);
-            if(!err && product)
-            {
-                var totalCost = 0;var totalPrice = 0;
-                var result = loadProducts(i++, cart);
-                totalPrice += result.totalPrice;
-                totalCost += result.totalCost;
-                return {"totalCost" : totalCost, "totalPrice" : totalPrice};
-            }
-        });
-    }
-    return {"totalCost" : 0, "totalPrice" : 0};
-}
 
 router.route('/shoppingcart')
     .post(function(req, res){
