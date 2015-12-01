@@ -167,6 +167,7 @@ router.route('/accounts/:account_id')
 router.route('/orders')
     .post(function(req, res){
     var order = new Order();
+    order.buyerId = req.body.buyerId;
     order.totalPrice = req.body.totalPrice;
     order.totalCost = req.body.totalCost;
     order.date = req.body.date;
